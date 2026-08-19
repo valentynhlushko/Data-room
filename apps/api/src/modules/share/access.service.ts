@@ -18,6 +18,11 @@ export type ResourceRef = {
   dataRoomId: string;
 };
 
+export type AccessViewer = {
+  id: string;
+  email: string;
+};
+
 @Injectable()
 export class AccessService {
   constructor(private readonly shareRepository: ShareRepository) {}
@@ -46,94 +51,50 @@ export class AccessService {
     return resource;
   }
 
-  async assertCanViewFolder(userId: string, folder: Folder): Promise<void> {
-    if (await this.canViewFolder(userId, folder)) {
+  async assertCanViewFolder(viewer: AccessViewer, folder: Folder): Promise<void> {
+    if (await this.canViewFolder(viewer, folder)) {
       return;
     }
 
     throw new ForbiddenException(FOLDER_ERRORS.FORBIDDEN);
   }
 
-  async assertCanViewFile(userId: string, file: FileRecord): Promise<void> {
-    if (await this.canViewFile(userId, file)) {
+  async assertCanViewFile(viewer: AccessViewer, file: FileRecord): Promise<void> {
+    if (await this.canViewFile(viewer, file)) {
       return;
     }
 
     throw new ForbiddenException(FILE_ERRORS.FORBIDDEN);
   }
 
-  async canViewFolder(userId: string, folder: Folder): Promise<boolean> {
-    const dataRoom = await this.shareRepository.findDataRoom(folder.dataRoomId);
-    if (dataRoom?.ownerId === userId) {
-      return true;
-    }
-
-    const ancestorIds = await this.shareRepository.findAncestorFolderIds(
-      folder.id,
-    );
-    const shares = await this.findUserShares(userId, [
-      {
-        resourceType: SHARE_RESOURCE_TYPE.DATA_ROOM,
-        resourceId: folder.dataRoomId,
-      },
-      ...ancestorIds.map((id) => ({
-        resourceType: SHARE_RESOURCE_TYPE.FOLDER,
-        resourceId: id,
-      })),
-    ]);
-
-    return shares.length > 0;
+  async canViewFolder(viewer: AccessViewer, folder: Folder): Promise<boolean> {
+    const grants = await this.loadGrants(viewer, folder.dataRoomId, folder.id);
+    return grants.isOwner || grants.shares.length > 0;
   }
 
-  async canViewFile(userId: string, file: FileRecord): Promise<boolean> {
-    const dataRoom = await this.shareRepository.findDataRoom(file.dataRoomId);
-    if (dataRoom?.ownerId === userId) {
-      return true;
-    }
-
-    const ancestorIds = await this.shareRepository.findAncestorFolderIds(
-      file.folderId,
-    );
-    const shares = await this.findUserShares(userId, [
-      {
-        resourceType: SHARE_RESOURCE_TYPE.DATA_ROOM,
-        resourceId: file.dataRoomId,
-      },
+  async canViewFile(viewer: AccessViewer, file: FileRecord): Promise<boolean> {
+    const grants = await this.loadGrants(viewer, file.dataRoomId, file.folderId, [
       {
         resourceType: SHARE_RESOURCE_TYPE.FILE,
         resourceId: file.id,
       },
-      ...ancestorIds.map((id) => ({
-        resourceType: SHARE_RESOURCE_TYPE.FOLDER,
-        resourceId: id,
-      })),
     ]);
-
-    return shares.length > 0;
+    return grants.isOwner || grants.shares.length > 0;
   }
 
   async clipBreadcrumbStart(
-    userId: string,
+    viewer: AccessViewer,
     folder: Folder,
   ): Promise<string | null> {
-    const dataRoom = await this.shareRepository.findDataRoom(folder.dataRoomId);
-    if (dataRoom?.ownerId === userId) {
-      return null;
-    }
-
-    const ancestorIds = await this.shareRepository.findAncestorFolderIds(
+    const { isOwner, ancestorIds, shares } = await this.loadGrants(
+      viewer,
+      folder.dataRoomId,
       folder.id,
     );
-    const shares = await this.findUserShares(userId, [
-      {
-        resourceType: SHARE_RESOURCE_TYPE.DATA_ROOM,
-        resourceId: folder.dataRoomId,
-      },
-      ...ancestorIds.map((id) => ({
-        resourceType: SHARE_RESOURCE_TYPE.FOLDER,
-        resourceId: id,
-      })),
-    ]);
+
+    if (isOwner) {
+      return null;
+    }
 
     if (shares.some((share) => share.resourceType === SHARE_RESOURCE_TYPE.DATA_ROOM)) {
       return null;
@@ -217,18 +178,45 @@ export class AccessService {
     return null;
   }
 
-  private async findUserShares(
-    userId: string,
-    resources: { resourceType: ShareResourceType; resourceId: string }[],
+  private async loadGrants(
+    viewer: AccessViewer,
+    dataRoomId: string,
+    chainFolderId: string,
+    extra: { resourceType: ShareResourceType; resourceId: string }[] = [],
   ) {
-    const user = await this.shareRepository.findUserById(userId);
-    if (!user) {
-      return [];
+    const dataRoom = await this.shareRepository.findDataRoom(dataRoomId);
+    if (dataRoom?.ownerId === viewer.id) {
+      return {
+        isOwner: true,
+        ancestorIds: [] as string[],
+        shares: [] as Share[],
+      };
     }
 
+    const ancestorIds =
+      await this.shareRepository.findAncestorFolderIds(chainFolderId);
+    const shares = await this.findUserShares(viewer, [
+      {
+        resourceType: SHARE_RESOURCE_TYPE.DATA_ROOM,
+        resourceId: dataRoomId,
+      },
+      ...extra,
+      ...ancestorIds.map((id) => ({
+        resourceType: SHARE_RESOURCE_TYPE.FOLDER,
+        resourceId: id,
+      })),
+    ]);
+
+    return { isOwner: false, ancestorIds, shares };
+  }
+
+  private findUserShares(
+    viewer: AccessViewer,
+    resources: { resourceType: ShareResourceType; resourceId: string }[],
+  ) {
     return this.shareRepository.findActiveMatching({
-      userId,
-      email: user.email,
+      userId: viewer.id,
+      email: viewer.email,
       resources,
     });
   }

@@ -34,7 +34,7 @@ export class FolderController {
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.folderService.getById(id, user.id);
+    return this.folderService.getById(id, user);
   }
 
   @Get(':id/contents')
@@ -44,7 +44,7 @@ export class FolderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: ListFilesQueryDto,
   ) {
-    return this.folderService.getContents(id, user.id, query);
+    return this.folderService.getContents(id, user, query);
   }
 
   @Get(':id/deletion-preview')

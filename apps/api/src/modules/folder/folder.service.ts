@@ -10,7 +10,7 @@ import { DATA_ROOM_ERRORS } from '../data-room/constants/data-room.errors';
 import { FolderRepository } from './repositories/folder.repository';
 import type { Folder } from './types/folder.types';
 import { FileService } from '../file/file.service';
-import { AccessService } from '../share/access.service';
+import { AccessService, type AccessViewer } from '../share/access.service';
 import { ShareService } from '../share/share.service';
 
 @Injectable()
@@ -22,10 +22,10 @@ export class FolderService {
     private readonly shareService: ShareService,
   ) {}
 
-  async getById(id: string, userId: string) {
-    const folder = await this.getReadableFolder(id, userId);
+  async getById(id: string, viewer: AccessViewer) {
+    const folder = await this.getReadableFolder(id, viewer);
     const clipFrom = await this.accessService.clipBreadcrumbStart(
-      userId,
+      viewer,
       folder,
     );
     const breadcrumbs = await this.buildBreadcrumbs(folder, clipFrom);
@@ -35,12 +35,12 @@ export class FolderService {
 
   async getContents(
     id: string,
-    userId: string,
+    viewer: AccessViewer,
     query: { cursor?: string; limit?: number } = {},
   ) {
-    const folder = await this.getReadableFolder(id, userId);
+    const folder = await this.getReadableFolder(id, viewer);
     const clipFrom = await this.accessService.clipBreadcrumbStart(
-      userId,
+      viewer,
       folder,
     );
     const [breadcrumbs, folders, filePage, dataRoom] = await Promise.all([
@@ -136,14 +136,17 @@ export class FolderService {
     return { id };
   }
 
-  private async getReadableFolder(id: string, userId: string): Promise<Folder> {
+  private async getReadableFolder(
+    id: string,
+    viewer: AccessViewer,
+  ): Promise<Folder> {
     const folder = await this.folderRepository.findById(id);
 
     if (!folder) {
       throw new NotFoundException(FOLDER_ERRORS.NOT_FOUND);
     }
 
-    await this.accessService.assertCanViewFolder(userId, folder);
+    await this.accessService.assertCanViewFolder(viewer, folder);
     return folder;
   }
 

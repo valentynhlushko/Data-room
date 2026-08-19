@@ -19,7 +19,7 @@ import { FileRepository } from './repositories/file.repository';
 import { StorageService } from '../storage/storage.service';
 import type { FileRecord } from './types/file.types';
 import type { Folder } from '../folder/types/folder.types';
-import { AccessService } from '../share/access.service';
+import { AccessService, type AccessViewer } from '../share/access.service';
 import { ShareService } from '../share/share.service';
 
 type UploadedPdf = {
@@ -38,12 +38,12 @@ export class FileService {
     private readonly shareService: ShareService,
   ) {}
 
-  async getById(id: string, userId: string) {
-    return this.toSummary(await this.getReadableFile(id, userId));
+  async getById(id: string, viewer: AccessViewer) {
+    return this.toSummary(await this.getReadableFile(id, viewer));
   }
 
-  async getPreviewUrl(id: string, userId: string) {
-    const file = await this.getReadableFile(id, userId);
+  async getPreviewUrl(id: string, viewer: AccessViewer) {
+    const file = await this.getReadableFile(id, viewer);
     const url = await this.storageService.createSignedUrl(file.storageKey);
 
     return { url, expiresIn: 3600 };
@@ -164,14 +164,17 @@ export class FileService {
     return this.fileRepository.countInSubtree(folderId);
   }
 
-  private async getReadableFile(id: string, userId: string): Promise<FileRecord> {
+  private async getReadableFile(
+    id: string,
+    viewer: AccessViewer,
+  ): Promise<FileRecord> {
     const file = await this.fileRepository.findById(id);
 
     if (!file) {
       throw new NotFoundException(FILE_ERRORS.NOT_FOUND);
     }
 
-    await this.accessService.assertCanViewFile(userId, file);
+    await this.accessService.assertCanViewFile(viewer, file);
     return file;
   }
 

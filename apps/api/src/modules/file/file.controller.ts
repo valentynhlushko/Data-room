@@ -55,7 +55,7 @@ export class FileController {
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.fileService.getById(id, user.id);
+    return this.fileService.getById(id, user);
   }
 
   @Get(':id/preview-url')
@@ -64,7 +64,7 @@ export class FileController {
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.fileService.getPreviewUrl(id, user.id);
+    return this.fileService.getPreviewUrl(id, user);
   }
 
   @Patch(':id')

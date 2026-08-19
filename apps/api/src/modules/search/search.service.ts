@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SHARE_RESOURCE_TYPE } from '../share/constants/share.errors';
-import { AccessService } from '../share/access.service';
+import { AccessService, type AccessViewer } from '../share/access.service';
 import { ShareRepository } from '../share/repositories/share.repository';
 import { DataRoomRepository } from '../data-room/repositories/data-room.repository';
 import { FolderRepository } from '../folder/repositories/folder.repository';
@@ -23,6 +23,7 @@ export class SearchService {
       return { folders: [], files: [] };
     }
 
+    const viewer = { id: userId, email };
     const scope = await this.buildScope(userId, email);
     const [folders, files] = await Promise.all([
       this.searchRepository.searchFolders({
@@ -40,10 +41,10 @@ export class SearchService {
 
     return {
       folders: await Promise.all(
-        folders.map((folder) => this.toFolderHit(userId, folder)),
+        folders.map((folder) => this.toFolderHit(viewer, folder)),
       ),
       files: await Promise.all(
-        files.map((file) => this.toFileHit(userId, file)),
+        files.map((file) => this.toFileHit(viewer, file)),
       ),
     };
   }
@@ -88,7 +89,7 @@ export class SearchService {
   }
 
   private async toFolderHit(
-    userId: string,
+    viewer: AccessViewer,
     folder: {
       id: string;
       name: string;
@@ -102,7 +103,7 @@ export class SearchService {
       folder.dataRoomId,
     );
     const path = full
-      ? await this.buildPath(userId, full)
+      ? await this.buildPath(viewer, full)
       : [{ id: folder.id, name: folder.name, isRoot: folder.isRoot }];
 
     return {
@@ -114,7 +115,7 @@ export class SearchService {
   }
 
   private async toFileHit(
-    userId: string,
+    viewer: AccessViewer,
     file: {
       id: string;
       name: string;
@@ -126,7 +127,7 @@ export class SearchService {
     const dataRoom = await this.folderRepository.findDataRoomMeta(
       file.dataRoomId,
     );
-    const path = parent ? await this.buildPath(userId, parent) : [];
+    const path = parent ? await this.buildPath(viewer, parent) : [];
 
     return {
       id: file.id,
@@ -137,9 +138,9 @@ export class SearchService {
     };
   }
 
-  private async buildPath(userId: string, folder: Folder) {
+  private async buildPath(viewer: AccessViewer, folder: Folder) {
     const clipFrom = await this.accessService.clipBreadcrumbStart(
-      userId,
+      viewer,
       folder,
     );
     const path: { id: string; name: string; isRoot: boolean }[] = [];

@@ -48,7 +48,9 @@ export function FileUploadPanel({
   }, [uploads, activeCount, canClear, onDismiss, onClearFinished])
 
   useEffect(() => {
-    return () => toast.dismiss(UPLOAD_TOAST_ID)
+    return () => {
+      toast.dismiss(UPLOAD_TOAST_ID)
+    }
   }, [])
 
   return null
