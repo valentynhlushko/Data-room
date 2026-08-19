@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.DS_Store
+.env
+.env.*
+!.env.example
+**/.env
+apps/api/.env
+apps/web/.env
+*.pdf
+coverage
+.pnpm-store

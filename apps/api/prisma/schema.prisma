@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  supabaseId  String   @unique @map("supabase_id")
+  email       String   @unique
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dataRooms      DataRoom[]
+  createdFolders Folder[]   @relation("FolderCreatedBy")
+  uploadedFiles  File[]     @relation("FileUploadedBy")
+  createdShares  Share[]    @relation("ShareCreatedBy")
+  receivedShares Share[]    @relation("ShareGrantee")
+
+  @@map("users")
+}
+
+model DataRoom {
+  id        String   @id @default(uuid())
+  name      String   @default("My Data Room")
+  ownerId   String   @map("owner_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folders Folder[]
+  files   File[]
+  shares  Share[]
+
+  @@index([ownerId])
+  @@map("data_rooms")
+}
+
+model Folder {
+  id          String   @id @default(uuid())
+  name        String
+  isRoot      Boolean  @default(false) @map("is_root")
+  dataRoomId  String   @map("data_room_id")
+  parentId    String?  @map("parent_id")
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dataRoom  DataRoom @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  createdBy User     @relation("FolderCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  files     File[]
+
+  @@index([dataRoomId])
+  @@index([parentId])
+  @@map("folders")
+}
+
+model File {
+  id           String   @id @default(uuid())
+  name         String
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  storageKey   String   @unique @map("storage_key")
+  folderId     String   @map("folder_id")
+  dataRoomId   String   @map("data_room_id")
+  uploadedById String   @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  dataRoom   DataRoom @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation("FileUploadedBy", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, name])
+  @@index([folderId])
+  @@index([dataRoomId])
+  @@map("files")
+}
+
+enum ShareResourceType {
+  DATA_ROOM
+  FOLDER
+  FILE
+}
+
+enum ShareKind {
+  PUBLIC_LINK
+  USER
+}
+
+enum ShareRole {
+  VIEWER
+  EDITOR
+}
+
+model Share {
+  id            String            @id @default(uuid())
+  dataRoomId    String            @map("data_room_id")
+  resourceType  ShareResourceType @map("resource_type")
+  resourceId    String            @map("resource_id")
+  kind          ShareKind
+  token         String?           @unique
+  granteeUserId String?           @map("grantee_user_id")
+  granteeEmail  String?           @map("grantee_email")
+  role          ShareRole         @default(VIEWER)
+  createdById   String            @map("created_by_id")
+  revokedAt     DateTime?         @map("revoked_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  dataRoom  DataRoom @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("ShareCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  grantee   User?    @relation("ShareGrantee", fields: [granteeUserId], references: [id], onDelete: SetNull)
+
+  @@index([dataRoomId])
+  @@index([resourceType, resourceId])
+  @@index([granteeUserId])
+  @@index([granteeEmail])
+  @@map("shares")
+}
