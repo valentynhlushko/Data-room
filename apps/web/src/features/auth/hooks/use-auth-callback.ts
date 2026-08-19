@@ -59,9 +59,26 @@ export function useAuthCallback() {
       goToLogin()
     }, 8000)
 
-    void supabase.auth.getSession().then(({ data }) => {
+    void (async () => {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const accessToken = hash.get('access_token')
+      const refreshToken = hash.get('refresh_token')
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (!error) {
+          complete(data.session)
+          return
+        }
+      }
+
+      const { data } = await supabase.auth.getSession()
       complete(data.session)
-    })
+    })()
 
     const {
       data: { subscription },
