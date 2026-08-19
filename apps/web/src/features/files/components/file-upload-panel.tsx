@@ -1,7 +1,11 @@
+import { useEffect } from 'react'
 import { CheckCircle2Icon, CircleAlertIcon, XIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Progress } from '@/shared/ui/progress'
 import type { FileUploadItem } from '../hooks/use-file-uploads'
+
+const UPLOAD_TOAST_ID = 'file-uploads'
 
 type FileUploadPanelProps = {
   uploads: FileUploadItem[]
@@ -14,15 +18,57 @@ export function FileUploadPanel({
   onDismiss,
   onClearFinished,
 }: FileUploadPanelProps) {
-  if (uploads.length === 0) {
-    return null
-  }
-
   const activeCount = uploads.filter((item) => item.status === 'uploading').length
   const canClear = uploads.some((item) => item.status !== 'uploading')
 
+  useEffect(() => {
+    if (uploads.length === 0) {
+      toast.dismiss(UPLOAD_TOAST_ID)
+      return
+    }
+
+    toast.custom(
+      () => (
+        <UploadCard
+          uploads={uploads}
+          activeCount={activeCount}
+          canClear={canClear}
+          onDismiss={onDismiss}
+          onClearFinished={onClearFinished}
+        />
+      ),
+      {
+        id: UPLOAD_TOAST_ID,
+        duration: Infinity,
+        closeButton: false,
+        unstyled: true,
+        className: 'border-0 bg-transparent p-0 shadow-none',
+      },
+    )
+  }, [uploads, activeCount, canClear, onDismiss, onClearFinished])
+
+  useEffect(() => {
+    return () => toast.dismiss(UPLOAD_TOAST_ID)
+  }, [])
+
+  return null
+}
+
+function UploadCard({
+  uploads,
+  activeCount,
+  canClear,
+  onDismiss,
+  onClearFinished,
+}: {
+  uploads: FileUploadItem[]
+  activeCount: number
+  canClear: boolean
+  onDismiss: (id: string) => void
+  onClearFinished: () => void
+}) {
   return (
-    <div className="pointer-events-auto fixed right-4 bottom-4 z-40 w-full max-w-sm rounded-xl border bg-popover p-3 shadow-lg">
+    <div className="w-[356px] rounded-xl border bg-popover p-3 shadow-lg">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-sm font-medium">
           {activeCount > 0

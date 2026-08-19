@@ -4,10 +4,13 @@ import { FileIcon, FolderIcon, Loader2Icon, SearchIcon } from 'lucide-react'
 import { Input } from '@/shared/ui/input'
 import { useSidebar } from '@/shared/ui/sidebar'
 import { cn } from '@/lib/utils'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { getFolderLabel } from '@/features/folders/folder.utils'
 import { useSupabaseSession } from '@/features/auth/hooks/use-supabase-session'
 import type { SearchFileHit, SearchFolderHit } from '@/types/search'
 import { useSearch } from '../hooks/use-search'
+
+const SEARCH_DEBOUNCE_MS = 400
 
 export function AppSearch() {
   const { session } = useSupabaseSession()
@@ -16,14 +19,9 @@ export function AppSearch() {
   const navigate = useNavigate()
   const rootRef = useRef<HTMLDivElement>(null)
   const [value, setValue] = useState('')
-  const [debounced, setDebounced] = useState('')
   const [open, setOpen] = useState(false)
+  const debounced = useDebouncedValue(value.trim(), SEARCH_DEBOUNCE_MS)
   const results = useSearch(debounced)
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value.trim()), 250)
-    return () => window.clearTimeout(timer)
-  }, [value])
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -42,12 +40,15 @@ export function AppSearch() {
 
   const folders = results.data?.folders ?? []
   const files = results.data?.files ?? []
+  const query = value.trim()
+  const isDebouncing = query.length > 0 && query !== debounced
+  const isSearching = isDebouncing || (debounced.length > 0 && results.isFetching)
   const isEmpty =
+    !isSearching &&
     debounced.length > 0 &&
-    !results.isPending &&
     folders.length === 0 &&
     files.length === 0
-  const showPanel = open && value.trim().length > 0
+  const showPanel = open && query.length > 0
 
   function openFolder(folder: SearchFolderHit) {
     setOpen(false)
@@ -92,7 +93,7 @@ export function AppSearch() {
         </div>
         {showPanel ? (
           <div className="absolute top-[calc(100%+0.25rem)] z-30 w-full overflow-hidden rounded-xl border bg-popover shadow-md">
-            {results.isPending ? (
+            {isSearching ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
               </div>

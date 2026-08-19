@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { searchItems } from '@/api/search.api'
 import { searchQueryKeys } from '../search-query-keys'
 
@@ -9,5 +9,6 @@ export function useSearch(query: string) {
     queryKey: searchQueryKeys.query(q),
     queryFn: () => searchItems(q),
     enabled: q.length > 0,
+    placeholderData: keepPreviousData,
   })
 }

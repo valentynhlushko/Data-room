@@ -26,7 +26,7 @@ import { Input } from '@/shared/ui/input'
 import { Skeleton } from '@/shared/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/avatar'
 import { getApiErrorMessage } from '@/lib/api-error'
-import type { ShareTarget } from '@/types/share'
+import { SHARE_RESOURCE_TYPE, type ShareTarget } from '@/types/share'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { SHARE_ERRORS } from '../constants/share.errors'
 import { useResourceShares } from '../hooks/use-resource-shares'
@@ -74,12 +74,15 @@ export function ShareDialog({ target, open, onOpenChange }: ShareDialogProps) {
     if (!shareUrl) {
       return
     }
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      toast.success('Link copied')
-    } catch {
-      toast.error(SHARE_ERRORS.COPY_FAILED)
+    await copyText(shareUrl)
+  }
+
+  async function handleCopyInviteUrl() {
+    const url = inviteeUrl(target)
+    if (!url) {
+      return
     }
+    await copyText(url)
   }
 
   return (
@@ -112,6 +115,15 @@ export function ShareDialog({ target, open, onOpenChange }: ShareDialogProps) {
             disabled={mutations.invite.isPending || !emailInput.trim()}
           >
             Share
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!target}
+            onClick={() => void handleCopyInviteUrl()}
+          >
+            <CopyIcon />
+            Copy URL
           </Button>
         </div>
 
@@ -285,4 +297,25 @@ function parseEmails(value: string) {
     }
   }
   return [...unique]
+}
+
+function inviteeUrl(target: ShareTarget | null) {
+  if (!target) {
+    return null
+  }
+
+  if (target.resourceType === SHARE_RESOURCE_TYPE.FOLDER) {
+    return `${window.location.origin}/folders/${target.resourceId}`
+  }
+
+  return `${window.location.origin}${window.location.pathname}`
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.success('Link copied')
+  } catch {
+    toast.error(SHARE_ERRORS.COPY_FAILED)
+  }
 }
