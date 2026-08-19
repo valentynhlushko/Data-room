@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { verify, type JwtPayload } from 'jsonwebtoken';
+import { decode, verify, type JwtPayload } from 'jsonwebtoken';
 import { AUTH_ERRORS } from './constants/auth.errors';
 import type { SupabaseJwtPayload } from './types/supabase-jwt';
 
@@ -25,11 +25,19 @@ export class SupabaseAuthService {
   }
 
   async verifyAccessToken(token: string): Promise<SupabaseJwtPayload> {
-    if (this.jwtSecret) {
+    const alg = this.peekAlg(token);
+
+    if (alg === 'HS256' && this.jwtSecret) {
       return this.verifyLocal(token);
     }
 
     return this.verifyRemote(token);
+  }
+
+  private peekAlg(token: string): string | null {
+    const decoded = decode(token, { complete: true });
+    const alg = decoded?.header?.alg;
+    return typeof alg === 'string' ? alg : null;
   }
 
   private verifyLocal(token: string): SupabaseJwtPayload {
