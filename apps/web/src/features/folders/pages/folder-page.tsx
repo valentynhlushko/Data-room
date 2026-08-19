@@ -187,7 +187,7 @@ function FolderBrowser({ folderId }: { folderId: string }) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-6">
+      <div className="flex flex-1 flex-col px-6 pb-6 pt-8">
         {contentsQuery.isPending ? (
           <FolderListSkeleton />
         ) : contentsQuery.isError ? (

@@ -59,7 +59,7 @@ export function FileUploadDropzone({
     <div
       className={cn(
         'relative flex min-h-0 flex-1 flex-col',
-        'data-[dragging=true]:before:pointer-events-none data-[dragging=true]:before:absolute data-[dragging=true]:before:inset-3 data-[dragging=true]:before:z-10 data-[dragging=true]:before:rounded-xl data-[dragging=true]:before:border-2 data-[dragging=true]:before:border-dashed data-[dragging=true]:before:border-primary data-[dragging=true]:before:bg-primary/5',
+        'data-[dragging=true]:before:pointer-events-none data-[dragging=true]:before:absolute data-[dragging=true]:before:inset-x-4 data-[dragging=true]:before:bottom-4 data-[dragging=true]:before:top-20 data-[dragging=true]:before:z-10 data-[dragging=true]:before:rounded-xl data-[dragging=true]:before:border-2 data-[dragging=true]:before:border-dashed data-[dragging=true]:before:border-primary data-[dragging=true]:before:bg-primary/5',
       )}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
