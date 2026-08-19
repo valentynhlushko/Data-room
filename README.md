@@ -13,8 +13,8 @@ Needs Node 20+, pnpm 9, Docker (or Postgres 16), and a [Supabase](https://supaba
 ### 1. Supabase
 
 1. New project.
-2. Authentication > Providers > Google: turn Google on. Add the redirect URL from the dashboard (`http://localhost:5173` locally).
-3. Authentication > URL configuration: site URL `http://localhost:5173`.
+2. Authentication > Providers > Google: turn Google on. Redirect URLs: `http://localhost:5173/**` and, after deploy, your frontend origin. The app lands on `/auth/callback`.
+3. Authentication > URL configuration: site URL `http://localhost:5173` (production URL later).
 4. Project Settings > API: Project URL, `anon` key, `service_role` key, JWT Secret.
 5. Storage bucket `dataroom-files` (private). The API will create it on first upload if it is not there.
 
@@ -26,7 +26,7 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
-Fill `SUPABASE_*` in the API env and `VITE_SUPABASE_*` in the web env. Leave `VITE_API_URL=http://localhost:3000/api`.
+Fill `SUPABASE_*` in `apps/api/.env` and `VITE_SUPABASE_*` in `apps/web/.env`. Leave `VITE_API_URL=http://localhost:3000/api`. Set `FRONTEND_URL` on the API to the web origin (CORS).
 
 ### 3. Database
 
@@ -74,19 +74,23 @@ docker compose up --build
 
 ## Design
 
-One data room per account, created on first API call together with a root folder. I did not build a room picker.
+One data room per account. It is created on first API call, with a root folder. No room switcher.
 
-Folders are an adjacency list (`parent_id`). Deletes, delete-previews, storage cleanup, and share inheritance walk the tree with `WITH RECURSIVE`. I did not bother with nested sets or a materialized path; writes stay simple and Postgres does the walk.
+Folders use `parent_id`. Deletes, delete preview, blob cleanup, and share inheritance use `WITH RECURSIVE` in Postgres.
 
-PDF bytes sit in Supabase Storage at `{dataRoomId}/{fileId}.pdf`. Postgres only has name, size, mime, `storage_key`. Preview is a short-lived signed URL so the bucket can stay private.
+PDFs go to Supabase Storage at `{dataRoomId}/{fileId}.pdf`. Postgres stores name, size, mime, and `storage_key`. Preview uses a short-lived signed URL.
 
-File names are unique per folder. Upload of a duplicate becomes `Report (1).pdf`. Rename/move that would collide just 409. Sibling folder names are unique in app code. The root folder cannot be renamed or deleted.
+File names are unique per folder. A second `Report.pdf` becomes `Report (1).pdf`. Rename/move collisions return 409. Folder names are unique among siblings. The root folder cannot be renamed or deleted.
 
-Sharing is a grant, not a copy. One `shares` row points at a data room, folder, or file. A folder/room grant includes everything underneath; breadcrumbs stop at the shared node so you cannot walk up. Public links use a random `token`. User shares need an account (otherwise send a link). Recipients are viewers. Only the owner writes.
+A `shares` row is a grant on a data room, folder, or file. Nested content is included. Breadcrumbs stop at the shared node. Public links use a random `token`. User shares need an account. Recipients are viewers; only the owner writes.
 
-Web: Google via Supabase, `Authorization: Bearer <access token>`. API verifies HS256 with `SUPABASE_JWT_SECRET` (Auth `/user` only if that secret is missing).
+Login is Google via Supabase. The API sends `Authorization: Bearer`. HS256 is verified with `SUPABASE_JWT_SECRET`; ES256 via Auth `/user`. On 401 after a failed refresh the client signs out.
 
-Nest modules match the domain. Repositories wrap Prisma / raw SQL. Web is feature folders + TanStack Query.
+API is Nest modules + Prisma (raw SQL where needed). Web is feature folders + TanStack Query.
+
+Search: `ILIKE` on names, own room plus shares, max 15 hits.
+
+Name conflicts are the extra-credit stand-in for versioning. There is no history of the same file.
 
 ## Data model
 
@@ -171,29 +175,28 @@ FROM files
 WHERE folder_id IN (SELECT id FROM tree);
 ```
 
-Fine for a confirm-delete dialog. If every row in a listing needed a subtree size, I would store `file_count` / `total_bytes` on `folders` and bump them on upload/delete/move. Walking the tree once per row would be a bad idea.
+Fine for a delete warning. If listings needed subtree size on every row, denormalize `file_count` / `total_bytes` on `folders` and update on upload/delete/move.
 
 ### ~100k files in one data room
 
-File lists are paged. `GET /folders/:id/contents?cursor=&limit=50` (max 100) uses a name cursor, not `OFFSET`. The table loads the next page on scroll. Subfolders still come back in one query; if a directory had a huge number of child folders I would page those the same way. Past tens of thousands of *loaded* rows I would also virtualize the table.
+File lists are paged. `GET /folders/:id/contents?cursor=&limit=50` (max 100) uses a name cursor, not `OFFSET`. The UI loads the next page on scroll. Child folders still come in one query. For a huge number of subfolders I would page those too, and virtualize the table if many rows stay mounted.
 
-`(folder_id, name)` is the listing index. Queries stay scoped to a folder (or the ids from a share), not “all files in the room”.
+`(folder_id, name)` covers listing. Queries are per folder (or the ids from a share).
 
-Search is `ILIKE` on `name` with a small hit cap. No trigram index; btree on `name` would not help `%foo%` anyway. At 100k I would add `pg_trgm` (GIN on `name`) or a real search index, still filtered by room / share.
+Search is `ILIKE` with a hit cap. At 100k files add `pg_trgm` (GIN on `name`), still scoped by room / share.
 
-Blobs do not care how many rows you have. Folder delete gathers `storage_key` with the same CTE, then deletes objects.
-
-JWT is verified in-process. After the user exists we do not rewrite the row on every request.
+Folder delete collects `storage_key` with the same CTE, then removes objects.
 
 ### Editors later
 
-`shares.role` is already `VIEWER | EDITOR`. Public links stay viewer. For editors: set `EDITOR` on invite, then in `AccessService` owner = full access, `EDITOR` = mutate inside the shared subtree, `VIEWER` = read. Same table. Extra grants on a child folder are just more rows.
+`shares.role` is `VIEWER | EDITOR`. Public links stay viewer. Editors: write `EDITOR` on invite; in `AccessService` owner = full access, `EDITOR` = mutate in the shared subtree, `VIEWER` = read. Same table. A tighter grant on a child is another row.
 
 ## Using AI
 
-I used Cursor to write the modules and to move faster.
+I used Cursor to speed up implementation. My time went into the design: which stack to use, how the product should flow, and the UX.
 
 ## Hosted URLs
 
-- Frontend:
-- API health:
+- Frontend: https://data-room-1.onrender.com
+- API: https://data-room-cbmd.onrender.com
+- API health: https://data-room-cbmd.onrender.com/api/health
